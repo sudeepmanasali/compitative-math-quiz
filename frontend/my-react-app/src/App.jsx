@@ -69,11 +69,12 @@ export default function App() {
       });
 
       setMessage(res.data.message);
-      setAnswer("");
       loadLeaderboard();
     } catch (err) {
       console.log(err)
       setMessage("Server error.");
+    } finally {
+      setAnswer("");
     }
   }
 
@@ -87,6 +88,7 @@ export default function App() {
     socket.on("newQuestion", (q) => {
       setQuestion(q);
       setMessage("");
+      setAnswer("");
     });
 
     socket.on("winner", (data) => {
