@@ -8,6 +8,8 @@ export default function App() {
   const [username, setUsername] = useState("");
   const [joined, setJoined] = useState(false);
 
+  const [userId, setUserId] = useState(null);
+
   const [question, setQuestion] = useState(null);
   const [answer, setAnswer] = useState("");
 
@@ -16,17 +18,36 @@ export default function App() {
 
   async function loadLeaderboard() {
     const res = await api.get("/leaderboard");
-    console.log(res)
     setLeaderboard(res.data);
+  }
+
+  async function joinGame() {
+    if (!username.trim()) return;
+
+    try {
+      const res = await api.post("/join", { username });
+
+      setUserId(res.data.userId);
+      setJoined(true);
+
+      localStorage.setItem("userId", res.data.userId);
+      localStorage.setItem("username", res.data.username);
+
+      setMessage("");
+      loadLeaderboard();
+    } catch (err) {
+      setMessage("Join failed.");
+    }
   }
 
   async function submitAnswer() {
     if (!answer.trim()) return;
     if (!question) return;
+    if (!userId) return;
 
     try {
       const res = await api.post("/submit", {
-        username,
+        userId,
         questionId: question.questionId,
         answer
       });
@@ -38,6 +59,18 @@ export default function App() {
       setMessage("Server error.");
     }
   }
+
+  // Auto restore session
+  useEffect(() => {
+    const storedUserId = localStorage.getItem("userId");
+    const storedUsername = localStorage.getItem("username");
+
+    if (storedUserId && storedUsername) {
+      setUserId(storedUserId);
+      setUsername(storedUsername);
+      setJoined(true);
+    }
+  }, []);
 
   useEffect(() => {
     loadLeaderboard();
@@ -76,16 +109,12 @@ export default function App() {
             onChange={(e) => setUsername(e.target.value)}
           />
 
-          <button
-            style={styles.button}
-            onClick={() => {
-              if (!username.trim()) return;
-              setJoined(true);
-            }}
-          >
+          <button style={styles.button} onClick={joinGame}>
             Join
           </button>
         </div>
+
+        <p style={styles.message}>{message}</p>
       </div>
     );
   }
@@ -129,15 +158,37 @@ export default function App() {
         {leaderboard.length === 0 ? (
           <p>No winners yet.</p>
         ) : (
-          <ul>
-            {leaderboard.map((u, idx) => (
-              <li key={idx}>
-                {u.username} — {u.wins} wins
-              </li>
-            ))}
-          </ul>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>Rank</th>
+                <th style={styles.th}>Username</th>
+                <th style={styles.th}>Wins</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leaderboard.map((u, idx) => (
+                <tr key={u.userId}>
+                  <td style={styles.td}>{idx + 1}</td>
+                  <td style={styles.td}>{u.username}</td>
+                  <td style={styles.td}>{u.wins}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
+
+      <button
+        style={{ ...styles.button, marginTop: 20 }}
+        onClick={() => {
+          localStorage.removeItem("userId");
+          localStorage.removeItem("username");
+          window.location.reload();
+        }}
+      >
+        Logout
+      </button>
     </div>
   );
 }
@@ -146,7 +197,7 @@ const styles = {
   container: {
     fontFamily: "Arial",
     padding: 30,
-    maxWidth: 700,
+    maxWidth: 800,
     margin: "0 auto"
   },
   title: {
@@ -171,7 +222,7 @@ const styles = {
   input: {
     padding: 10,
     fontSize: 16,
-    width: 200
+    width: 220
   },
   button: {
     marginLeft: 10,
@@ -182,5 +233,20 @@ const styles = {
   message: {
     marginTop: 15,
     fontWeight: "bold"
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    marginTop: 10
+  },
+  th: {
+    border: "1px solid #ddd",
+    padding: 10,
+    textAlign: "left",
+    background: "#f5f5f5"
+  },
+  td: {
+    border: "1px solid #ddd",
+    padding: 10
   }
 };

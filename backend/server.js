@@ -1,38 +1,28 @@
-// // backend/server.js
-// import express from "express";
-// import cors from "cors";
-// import http from "http";
-// import { Server } from "socket.io";
-// import { v4 as uuidv4 } from "uuid";
-
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
-const {Server} = require("socket.io")
-const {v4}= require("uuid") 
-
-
+const { Server } = require("socket.io");
+const { v4: uuidv4 } = require("uuid");
 
 const app = express();
-app.use(cors()); 
+app.use(cors());
 app.use(express.json());
 
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+  cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
 // ------------------ In-memory state ------------------
-// NOTE: This works only for a single backend instance.
-// If the server restarts or scales horizontally, state is lost.
 let currentQuestion = null;
 let winnerLocked = false;
 
-const leaderboard = new Map(); // username -> wins
+// userId -> { username }
+const users = new Map();
+
+// userId -> wins
+const leaderboard = new Map();
 
 // ------------------ Question Generator ------------------
 function generateQuestion() {
@@ -45,10 +35,10 @@ function generateQuestion() {
   const op2 = ops[Math.floor(Math.random() * ops.length)];
 
   const problem = `(${a} ${op1} ${b}) ${op2} ${c}`;
-  const answer = eval(problem); // safe because we generate the string ourselves
+  const answer = eval(problem);
 
   return {
-    questionId: v4(),
+    questionId: uuidv4(),
     problem,
     answer
   };
@@ -79,11 +69,26 @@ app.get("/", (req, res) => {
   res.send("Math Quiz Backend Running");
 });
 
+// Join user (generate unique userId)
+app.post("/join", (req, res) => {
+  const { username } = req.body;
+
+  if (!username || !username.trim()) {
+    return res.status(400).json({ message: "Username required" });
+  }
+
+  const userId = uuidv4();
+  users.set(userId, { username });
+
+  res.json({
+    userId,
+    username
+  });
+});
+
 // Get current question
 app.get("/question", (req, res) => {
-  if (!currentQuestion) {
-    createNewQuestion();
-  }
+  if (!currentQuestion) createNewQuestion();
 
   res.json({
     questionId: currentQuestion.questionId,
@@ -93,17 +98,22 @@ app.get("/question", (req, res) => {
 
 // Submit answer
 app.post("/submit", (req, res) => {
-  const { username, questionId, answer } = req.body;
+  const { userId, questionId, answer } = req.body;
 
-  if (!username || !questionId || answer === undefined) {
+  if (!userId || !questionId || answer === undefined) {
     return res.status(400).json({ message: "Missing fields." });
+  }
+
+  const user = users.get(userId);
+  if (!user) {
+    return res.status(400).json({ message: "Invalid user. Please join again." });
   }
 
   if (!currentQuestion) {
     return res.status(400).json({ message: "No question active." });
   }
 
-  // If user answered an old question
+  // old question
   if (questionId !== currentQuestion.questionId) {
     return res.json({
       correct: false,
@@ -111,7 +121,7 @@ app.post("/submit", (req, res) => {
     });
   }
 
-  // If someone already won this round
+  // already winner
   if (winnerLocked) {
     return res.json({
       correct: false,
@@ -119,7 +129,7 @@ app.post("/submit", (req, res) => {
     });
   }
 
-  // Check answer
+  // incorrect
   if (Number(answer) !== Number(currentQuestion.answer)) {
     return res.json({
       correct: false,
@@ -127,21 +137,18 @@ app.post("/submit", (req, res) => {
     });
   }
 
-  // Winner found (first correct wins)
+  // Winner found
   winnerLocked = true;
 
-  // Update leaderboard
-  const currentWins = leaderboard.get(username) || 0;
-  leaderboard.set(username, currentWins + 1);
+  const wins = leaderboard.get(userId) || 0;
+  leaderboard.set(userId, wins + 1);
 
-  // Broadcast winner
   io.emit("winner", {
-    username,
+    username: user.username,
     problem: currentQuestion.problem,
     answer: currentQuestion.answer
   });
 
-  // Generate next question after short delay
   setTimeout(() => {
     createNewQuestion();
   }, 2000);
@@ -152,10 +159,17 @@ app.post("/submit", (req, res) => {
   });
 });
 
-// Get leaderboard
+// Leaderboard
 app.get("/leaderboard", (req, res) => {
   const sorted = Array.from(leaderboard.entries())
-    .map(([username, wins]) => ({ username, wins }))
+    .map(([userId, wins]) => {
+      const user = users.get(userId) || { username: "Unknown" };
+      return {
+        userId,
+        username: user.username,
+        wins
+      };
+    })
     .sort((a, b) => b.wins - a.wins)
     .slice(0, 10);
 
@@ -166,7 +180,6 @@ app.get("/leaderboard", (req, res) => {
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
-  // Send current question to newly connected user
   if (currentQuestion) {
     socket.emit("newQuestion", {
       questionId: currentQuestion.questionId,
