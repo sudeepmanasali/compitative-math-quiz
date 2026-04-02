@@ -17,9 +17,23 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [leaderboard, setLeaderboard] = useState([]);
 
+  const logout = () => {
+    localStorage.removeItem("userId");
+    localStorage.removeItem("username");
+    setUserId(null);
+    setUsername("");
+    setJoined(false)
+  }
+
   async function loadLeaderboard() {
-    const res = await api.get("/leaderboard");
-    setLeaderboard(res.data);
+    try {
+      const res = await api.get("/leaderboard");
+      setLeaderboard(res.data);
+    } catch (err) {
+      console.log(err);
+      logout();
+    }
+
   }
 
   async function joinGame() {
@@ -104,18 +118,18 @@ export default function App() {
             onChange={(e) => setUsername(e.target.value)}
           />
 
-  
+
         </div>
 
-         <div style={{ marginTop: 20 }}>
-        <button style={styles.button} onClick={joinGame}>
+        <div style={{ marginTop: 20 }}>
+          <button style={styles.button} onClick={joinGame}>
             Join
           </button>
 
-  
+
         </div>
 
-                
+
 
         <p style={styles.message}>{message}</p>
       </div>
@@ -147,15 +161,15 @@ export default function App() {
             onChange={(e) => setAnswer(e.target.value)}
           />
 
-       
+
         </div>
-          <div style={{ marginTop: 12 }}>
-             <button style={styles.button} onClick={submitAnswer}>
+        <div style={{ marginTop: 12 }}>
+          <button style={styles.button} onClick={submitAnswer}>
             Submit
           </button>
-       
+
         </div>
-        
+
 
         <p style={styles.message}>{message}</p>
       </div>
@@ -190,8 +204,7 @@ export default function App() {
       <button
         style={{ ...styles.button, marginTop: 20 }}
         onClick={() => {
-          localStorage.removeItem("userId");
-          localStorage.removeItem("username");
+          logout();
           window.location.reload();
         }}
       >
