@@ -5,10 +5,11 @@ import { io } from "socket.io-client";
 const socket = io(import.meta.env.VITE_API_BASE);
 
 export default function App() {
-  const [username, setUsername] = useState("");
-  const [joined, setJoined] = useState(false);
-
-  const [userId, setUserId] = useState(null);
+  const [userId, setUserId] = useState(() => localStorage.getItem("userId"));
+  const [username, setUsername] = useState(() => localStorage.getItem("username") || "");
+  const [joined, setJoined] = useState(() => {
+    return !!localStorage.getItem("userId") && !!localStorage.getItem("username");
+  });
 
   const [question, setQuestion] = useState(null);
   const [answer, setAnswer] = useState("");
@@ -36,6 +37,7 @@ export default function App() {
       setMessage("");
       loadLeaderboard();
     } catch (err) {
+      console.log(err)
       setMessage("Join failed.");
     }
   }
@@ -56,24 +58,17 @@ export default function App() {
       setAnswer("");
       loadLeaderboard();
     } catch (err) {
+      console.log(err)
       setMessage("Server error.");
     }
   }
 
-  // Auto restore session
   useEffect(() => {
-    const storedUserId = localStorage.getItem("userId");
-    const storedUsername = localStorage.getItem("username");
+    const fetchData = async () => {
+      await loadLeaderboard();
+    };
 
-    if (storedUserId && storedUsername) {
-      setUserId(storedUserId);
-      setUsername(storedUsername);
-      setJoined(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadLeaderboard();
+    fetchData();
 
     socket.on("newQuestion", (q) => {
       setQuestion(q);

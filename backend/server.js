@@ -158,7 +158,7 @@ app.post("/submit", async (req, res) => {
 
   // NX = only set if doesn't exist
   // EX = auto expire (cleanup)
-  const winnerSet = await redis.set(winnerKey, userId, "NX", "EX", 30);
+  const winnerSet = await redis.set(winnerKey, JSON.stringify({ userId, username: user.username }), "NX", "EX", 30);
 
   if (!winnerSet) {
     return res.json({
